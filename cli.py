@@ -118,6 +118,9 @@ def main():
 
     subparsers.add_parser("status", help="Afficher les statistiques et les annonces actives")
 
+    p_daemon = subparsers.add_parser("daemon", help="Lancer le bot en mode continu automatique")
+    p_daemon.add_argument("--interval", type=int, default=300, help="Intervalle en secondes (defaut 300)")
+
     p_search = subparsers.add_parser("search", help="Rechercher des produits sur un fournisseur")
     p_search.add_argument("--provider", default="amazon", choices=["amazon", "aliexpress"])
     p_search.add_argument("--query", required=True, help="Mot-cle de recherche")
@@ -137,6 +140,9 @@ def main():
 
     if args.command == "status":
         cmd_status()
+    elif args.command == "daemon":
+        from startbot import run_daemon_loop
+        run_daemon_loop(interval_sec=args.interval)
     elif args.command == "search":
         cmd_search(args)
     elif args.command in ["list-items", "list-item"]:

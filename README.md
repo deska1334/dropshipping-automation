@@ -93,3 +93,16 @@ Pour basculer du mode simulation au mode réel :
    EBAY_USER_TOKEN=votre_vrai_token_oauth
    ```
 2. Renseignez vos identifiants marchands (Amazon PA-API / AliExpress Dropshipping API).
+
+
+## Demarrage Rapide avec StartBot
+
+Vous pouvez demarrer le bot instantanement avec le script lanceur :
+- **Double-clic sur `startbot.bat`** (Windows)
+- Ou en ligne de commande :
+  ```bash
+  # Mode interactif
+  python startbot.py
+  # Ou direct en daemon
+  python startbot.py --daemon
+  ```

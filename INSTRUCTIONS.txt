@@ -6,6 +6,29 @@ Ce guide detaille l'ensemble des etapes pour installer, configurer et executer
 le bot de dropshipping automatisé avec protection anti-ban.
 
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+0. DEMARRAGE ULTRA-RAPIDE (STARTBOT)
+--------------------------------------------------------------------------------
+Un lanceur universel "startbot" a ete mis en place pour demarrer le projet :
+
+- Sous Windows (double-clic ou cmd) :
+    Double-cliquez sur "startbot.bat" ou tapez dans le terminal :
+    startbot.bat
+    ou
+    python startbot.py
+
+- Lancement direct du bot en boucle continue automatique :
+    python startbot.py --daemon
+    ou
+    python cli.py daemon
+
+- Options disponibles dans startbot :
+    [1] Lancer le Bot en continu (Daemon automatique)
+    [2] Executer un test complet de simulation (Test-Flow)
+    [3] Afficher le tableau de bord (Status & Benefices)
+    [4] Traiter les commandes payees en attente (Fulfill)
+    [5] Quitter
+
 1. PREREQUIS SYSTEME
 --------------------------------------------------------------------------------
 - Systeme d'exploitation : Windows, macOS ou Linux
