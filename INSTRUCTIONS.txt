@@ -1,0 +1,104 @@
+================================================================================
+          GUIDE COMPLET D'UTILISATION - BOT DROPSHIPPING AUTOMATISE
+================================================================================
+
+Ce guide detaille l'ensemble des etapes pour installer, configurer et executer
+le bot de dropshipping automatisé avec protection anti-ban.
+
+--------------------------------------------------------------------------------
+1. PREREQUIS SYSTEME
+--------------------------------------------------------------------------------
+- Systeme d'exploitation : Windows, macOS ou Linux
+- Python : Version 3.10 ou superieure installee
+- Git : Installe et configure
+- Connexion Internet active
+
+Pour verifier que Python est bien accessible :
+  python --version
+  pip --version
+
+--------------------------------------------------------------------------------
+2. INSTALLATION DES DEPENDANCES
+--------------------------------------------------------------------------------
+Ouvrez un terminal (PowerShell ou Invite de commandes) dans le dossier du projet
+et executez :
+
+  pip install -r requirements.txt
+
+Les bibliotheques installees comprennent :
+- aiohttp        : Requetes asynchrones ultra-rapides
+- pydantic       : Validation des schemas de donnees
+- python-dotenv  : Gestion securisee des variables d'environnement
+- colorama       : Colorisation des journaux dans la console
+
+--------------------------------------------------------------------------------
+3. VERIFICATION INITIALE ET TEST EN MODE SIMULATION
+--------------------------------------------------------------------------------
+Le bot est concu avec un mode simulation complet qui permet de valider 100% de
+la chaine sans depenser d'argent reel ni risquer de sanction :
+
+Etape A : Verifier l'etat du systeme et de la base de donnees
+  python cli.py status
+
+Etape B : Lancer un cycle complet de bout en bout (Test-Flow)
+  python cli.py test-flow
+
+Ce test simule successivement :
+  1. Le sourcage d'un article a bas prix chez un fournisseur (Amazon).
+  2. Le calcul automatique du prix de vente optimal avec marge et commissions.
+  3. La mise en vente simulee sur eBay avec delai anti-ban.
+  4. La detection d'un paiement valide recu d'un client francais.
+  5. L'achat automatique chez le fournisseur a l'adresse de livraison exacte.
+  6. La transmission du numero de suivi transporteur (Colissimo) a eBay.
+  7. La mise a jour du benefice net dans le tableau de bord.
+
+--------------------------------------------------------------------------------
+4. COMMANDES DU TERMINAL (CLI)
+--------------------------------------------------------------------------------
+
+A. Afficher le tableau de bord
+  python cli.py status
+  -> Affiche le nombre d'articles sources, les annonces eBay actives,
+     les commandes finalisees et les benefices nets cumules.
+
+B. Rechercher des articles sur un fournisseur specifique
+  python cli.py search --provider amazon --query "ecouteurs bluetooth" --limit 3
+  python cli.py search --provider aliexpress --query "smartwatch" --limit 3
+
+C. Sourcer et mettre en vente sur eBay
+  python cli.py list-items --provider amazon --query "projecteur portable" --limit 1
+  python cli.py list-items --provider aliexpress --query "lampe solaire" --limit 2
+
+D. Traiter les commandes en attente d'expedition
+  python cli.py fulfill
+  -> Parcourt les commandes payees sur eBay, passe les commandes chez
+     le fournisseur d'origine et met a jour les suivis.
+
+--------------------------------------------------------------------------------
+5. COMPRENDRE LE MECANISME ANTI-BAN (stealth.py)
+--------------------------------------------------------------------------------
+Pour eviter que vos comptes ne soient bloques par eBay, Amazon ou AliExpress :
+
+1. Delais aleatoires gaussiens (Jitter) :
+   Aucune action n'est instantanee. Le bot applique des pauses humaines :
+   - Recherche fournisseur : 4 a 12 secondes
+   - Publication eBay     : 30 a 90 secondes
+   - Achat automatique    : 15 a 45 secondes
+
+2. Quota journalier de publication :
+   Le fichier de configuration limite par defaut a 15 annonces par 24h.
+   Ne forcez jamais des centaines d'annonces sur un compte eBay recent
+   sous peine de suspension immediate (MC011).
+
+3. Coupe-circuit automatique :
+   Si une plateforme renvoie un blocage (Erreur 429, 403, Captcha),
+   le bot bloque temporairement toute requete vers ce site pendant
+   15 minutes pour laisser l'empreinte se refroidir.
+
+--------------------------------------------------------------------------------
+6. SORTIR DU MODE SIMULATION POUR VENDRE EN REEL
+--------------------------------------------------------------------------------
+Consultez le document dedie : GUIDE_PASSAGE_PRODUCTION.md
+Il vous guidera pas a pas pour generer vos cles API eBay et passer
+la variable SIMULATION_MODE a False dans le fichier .env.
+================================================================================
