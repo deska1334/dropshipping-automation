@@ -8,15 +8,17 @@ from pathlib import Path
 DB_FILE = Path(__file__).parent / "dropship.db"
 
 def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_FILE))
+    conn = sqlite3.connect(str(DB_FILE), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     return conn
 
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
     
-    # Table des articles sourcés (fournisseurs)
+    # Table des articles sources (fournisseurs)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +37,7 @@ def init_db():
     );
     """)
 
-    # Table des annonces eBay publiées
+    # Table des annonces eBay publiees
     cur.execute("""
     CREATE TABLE IF NOT EXISTS listings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +55,7 @@ def init_db():
     );
     """)
 
-    # Table des commandes clients et traitement d'achat automatisé
+    # Table des commandes clients et traitement d'achat automatise
     cur.execute("""
     CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +65,7 @@ def init_db():
         buyer_name TEXT NOT NULL,
         buyer_address_json TEXT NOT NULL,
         total_paid_eur REAL NOT NULL,
-        status TEXT DEFAULT 'PAID', -- PAID, SOURCING_ORDERED, SHIPPED, FAILED, COMPLETED
+        status TEXT DEFAULT 'PAID', -- PAID, NEEDS_REVIEW, SOURCING_ORDERED, SHIPPED, FAILED, COMPLETED
         source_order_id TEXT,
         tracking_number TEXT,
         carrier TEXT,
@@ -75,7 +77,7 @@ def init_db():
     );
     """)
 
-    # Journal d'activités et d'événements anti-ban
+    # Journal d'activites et d'evenements anti-ban
     cur.execute("""
     CREATE TABLE IF NOT EXISTS activity_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +92,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Fonctions CRUD simplifiées
 def upsert_product(provider: str, source_id: str, title: str, price_eur: float, 
                    shipping_eur: float = 0.0, in_stock: bool = True,
                    source_url: str = "", description: str = "", 
@@ -169,6 +170,20 @@ def save_order(ebay_order_id: str, ebay_item_id: str, buyer_username: str, buyer
     conn.close()
     return order_id
 
+def get_unfulfilled_orders() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM orders WHERE status IN ('PAID', 'PENDING_RETRY') ORDER BY id ASC")
+    rows = cur.fetchall()
+    orders = []
+    for r in rows:
+        d = dict(r)
+        d["shipping_address"] = json.loads(d["buyer_address_json"])
+        d["order_id"] = d["ebay_order_id"]
+        orders.append(d)
+    conn.close()
+    return orders
+
 def update_order_fulfillment(ebay_order_id: str, status: str, source_order_id: str = None,
                             tracking_number: str = None, carrier: str = None,
                             purchase_cost: float = None, actual_profit: float = None,
@@ -190,6 +205,25 @@ def update_order_fulfillment(ebay_order_id: str, status: str, source_order_id: s
     conn.commit()
     conn.close()
 
+def count_recent_listings(hours: int = 24) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) as cnt FROM listings WHERE created_at >= datetime('now', ?)", (f"-{hours} hours",))
+    count = cur.fetchone()["cnt"]
+    conn.close()
+    return count
+
+def count_recent_scrapes(platform: str, hours: int = 1) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT COUNT(*) as cnt FROM activity_logs 
+    WHERE category = ? AND created_at >= datetime('now', ?)
+    """, (f"scrape_{platform}", f"-{hours} hours"))
+    count = cur.fetchone()["cnt"]
+    conn.close()
+    return count
+
 def log_activity(level: str, category: str, message: str, details: Dict[str, Any] = None):
     conn = get_connection()
     cur = conn.cursor()
@@ -198,5 +232,4 @@ def log_activity(level: str, category: str, message: str, details: Dict[str, Any
     conn.commit()
     conn.close()
 
-# Initialisation au chargement
 init_db()

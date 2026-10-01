@@ -4,23 +4,17 @@ from typing import Dict, Any, List
 from config import cfg
 from database import (
     get_listing_by_ebay_id, get_product_by_id, 
-    save_order, update_order_fulfillment, log_activity
+    save_order, update_order_fulfillment, log_activity,
+    get_unfulfilled_orders
 )
 from platforms.ebay import ebay_client
 from providers.amazon import AmazonProvider
 from providers.aliexpress import AliExpressProvider
+from pricing import is_profitable_sale
 
 logger = logging.getLogger("FulfillmentEngine")
 
 class FulfillmentEngine:
-    """
-    Système automatisé de traitement et d'achat fournisseur :
-    1. Détecte les commandes payées sur eBay.
-    2. Identifie le fournisseur d'origine (Amazon / AliExpress).
-    3. Effectue une vérification de sécurité (stock restant et prix d'achat).
-    4. Passe la commande chez le fournisseur à destination du client.
-    5. Transmet automatiquement le numéro de suivi à eBay.
-    """
     def __init__(self):
         self.providers = {
             "amazon": AmazonProvider(),
@@ -34,10 +28,9 @@ class FulfillmentEngine:
         shipping_address = order_dict["shipping_address"]
         total_paid = order_dict["total_paid_eur"]
 
-        logger.info(f"=== [NOUVELLE COMMANDE REÇUE SUR EBAY] {ebay_order_id} ({total_paid:.2f} €) ===")
-        logger.info(f"Acheteur : {buyer_name} ({shipping_address['city']}, {shipping_address['country_code']})")
+        logger.info(f"=== [COMMANDE EBAY EN COURS] {ebay_order_id} ({total_paid:.2f} EUR) ===")
+        logger.info(f"Destinataire : {buyer_name} ({shipping_address.get('city', '')}, {shipping_address.get('country_code', 'FR')})")
 
-        # 1. Enregistrement en base de données
         save_order(
             ebay_order_id=ebay_order_id,
             ebay_item_id=ebay_item_id,
@@ -47,10 +40,9 @@ class FulfillmentEngine:
             total_paid=total_paid
         )
 
-        # 2. Retrouver l'annonce et le produit source
         listing = get_listing_by_ebay_id(ebay_item_id)
         if not listing:
-            msg = f"Impossible de retrouver l'annonce associée à {ebay_item_id}"
+            msg = f"Impossible de retrouver l'annonce associee a {ebay_item_id}"
             logger.error(msg)
             update_order_fulfillment(ebay_order_id, status="FAILED", error_message=msg)
             return False
@@ -70,8 +62,24 @@ class FulfillmentEngine:
             update_order_fulfillment(ebay_order_id, status="FAILED", error_message=msg)
             return False
 
-        # 3. Commande automatique chez le fournisseur vers l'adresse du client
-        logger.info(f"Déclenchement de l'achat automatique auprès de {provider_name.upper()}...")
+        # VERIFICATION DE SECURITE PRE-ACHAT (Stock & Hausse de prix imprevue)
+        fresh_details = provider.get_product_details(product["source_id"])
+        if fresh_details:
+            if not fresh_details.in_stock:
+                msg = f"Alerte : Le produit {product['source_id']} est en rupture chez {provider_name} !"
+                logger.error(msg)
+                update_order_fulfillment(ebay_order_id, status="NEEDS_REVIEW", error_message=msg)
+                return False
+                
+            current_total_cost = fresh_details.price_eur + fresh_details.shipping_eur
+            if not is_profitable_sale(current_total_cost, total_paid):
+                msg = f"Alerte Hausse de Prix : Cout fournisseur passe a {current_total_cost:.2f} EUR pour une vente a {total_paid:.2f} EUR. Achat stoppe pour eviter la perte."
+                logger.error(msg)
+                update_order_fulfillment(ebay_order_id, status="NEEDS_REVIEW", error_message=msg)
+                return False
+
+        # Execution de l'achat fournisseur
+        logger.info(f"Declenchement de l'achat automatique aupres de {provider_name.upper()}...")
         purchase_result = provider.order_and_ship(
             source_id=product["source_id"],
             quantity=1,
@@ -79,7 +87,7 @@ class FulfillmentEngine:
         )
 
         if not purchase_result.success:
-            logger.error(f"Échec de l'achat fournisseur : {purchase_result.error_message}")
+            logger.error(f"Echec de l'achat fournisseur : {purchase_result.error_message}")
             update_order_fulfillment(
                 ebay_order_id, 
                 status="FAILED", 
@@ -87,10 +95,7 @@ class FulfillmentEngine:
             )
             return False
 
-        # 4. Calcul de rentabilité réelle
         actual_profit = round(total_paid - purchase_result.total_charged_eur - (total_paid * 0.13), 2)
-        
-        # 5. Génération et transmission du tracking transporteur à eBay
         carrier = "Colissimo" if provider_name == "amazon" else "AliExpress Standard"
         tracking_number = f"FR{random.randint(100000000, 999999999)}CM"
         
@@ -100,7 +105,6 @@ class FulfillmentEngine:
             carrier=carrier
         )
 
-        # 6. Mise à jour finale en base de données
         update_order_fulfillment(
             ebay_order_id=ebay_order_id,
             status="COMPLETED",
@@ -112,13 +116,11 @@ class FulfillmentEngine:
         )
 
         logger.info(
-            f"[SUCCES] [COMMANDE FINALISÉE AVEC SUCCÈS !]\n"
+            f"[SUCCES] [COMMANDE FINALISEE]\n"
             f"  - Commande eBay : {ebay_order_id}\n"
-            f"  - Commande {provider_name.capitalize()} : {purchase_result.source_order_id}\n"
-            f"  - Numéro Suivi  : {tracking_number} ({carrier})\n"
-            f"  - Débit Achat   : {purchase_result.total_charged_eur:.2f} €\n"
-            f"  - Vente eBay    : {total_paid:.2f} €\n"
-            f"  - Bénéfice Net  : +{actual_profit:.2f} €\n"
+            f"  - Fournisseur   : {purchase_result.source_order_id} ({provider_name.capitalize()})\n"
+            f"  - N. Suivi      : {tracking_number} ({carrier})\n"
+            f"  - Benefice Net  : +{actual_profit:.2f} EUR\n"
         )
         return True
 
